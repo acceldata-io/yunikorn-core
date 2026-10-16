@@ -2194,8 +2194,8 @@ func TestSpecificUserResourceUsage(t *testing.T) {
 	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 
-	// Test invalid user name that does not match UserRegExp
-	invalidUserName := "1InvalidUser"
+	// Test invalid user name that is not printable
+	invalidUserName := "invalid\tuser"
 	req, err = createRequest(t, "/ws/v1/partition/default/usage/user/", map[string]string{"user": invalidUserName, "group": "testgroup"})
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -2248,9 +2248,16 @@ func TestSpecificGroupResourceUsage(t *testing.T) {
 	getGroupResourceUsage(resp, req)
 	assertParamsMissing(t, resp)
 
-	// Test group name with special characters escaped properly
-	validGroup := url.QueryEscape("test_a-b_c@#d@do:mai/n.com")
+	// Test group name with special characters escaped properly: accepted, but not tracked
+	validGroup := url.QueryEscape("[DEV] test_a-b_c@#d@do:mai/n.com")
 	req, err = createRequest(t, "/ws/v1/partition/default/usage/group", map[string]string{"user": "testuser", "group": validGroup})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getGroupResourceUsage(resp, req)
+	assertGroupNotExists(t, resp)
+
+	// Test group name that is not printable
+	req, err = createRequest(t, "/ws/v1/partition/default/usage/group", map[string]string{"user": "testuser", "group": url.QueryEscape("invalid\tgroup")})
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)

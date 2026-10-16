@@ -350,6 +350,10 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			if user == common.Empty {
 				continue
 			}
+			// percent-encoded names were checked by the config validator, keep the entry if it does not decode
+			if name, ok := configs.DecodeName(user, configs.UserRegExp); ok {
+				user = name
+			}
 			log.Log(log.SchedUGM).Debug("Processing user limits configuration",
 				zap.String("user", user),
 				zap.String("limit", limit.Limit),
@@ -371,6 +375,10 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 		for _, group := range limit.Groups {
 			if group == common.Empty {
 				continue
+			}
+			// percent-encoded names were checked by the config validator, keep the entry if it does not decode
+			if name, ok := configs.DecodeName(group, configs.GroupRegExp); ok {
+				group = name
 			}
 			log.Log(log.SchedUGM).Debug("Processing group limits configuration",
 				zap.String("group", group),

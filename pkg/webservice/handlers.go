@@ -1218,7 +1218,7 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if !configs.UserRegExp.MatchString(unescapedUser) {
+	if !configs.IsPrintableName(unescapedUser) {
 		buildJSONErrorResponse(w, InvalidUserName, http.StatusBadRequest)
 		return
 	}
@@ -1259,7 +1259,7 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if !configs.GroupRegExp.MatchString(unescapedGroupName) {
+	if !configs.IsPrintableName(unescapedGroupName) {
 		buildJSONErrorResponse(w, InvalidGroupName, http.StatusBadRequest)
 		return
 	}

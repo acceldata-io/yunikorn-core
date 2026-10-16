@@ -2427,3 +2427,60 @@ func TestIsQueueNameValid(t *testing.T) {
 		t.Errorf("invalid queue name, validation should have failed. err is %v", err)
 	}
 }
+
+func TestIsPrintableName(t *testing.T) {
+	for _, name := range []string{
+		"username",
+		"user@corp.com",
+		"[DEV] Example Team : External : Access : Administrator : example.com",
+		"Smith, John (Contractor) & co",
+		"1team",
+	} {
+		assert.Assert(t, IsPrintableName(name), "expected printable: %q", name)
+	}
+	for _, name := range []string{"", "   ", "tab\tname", "new\nline", "nul\x00", "bad\xffutf8"} {
+		assert.Assert(t, !IsPrintableName(name), "expected rejected: %q", name)
+	}
+}
+
+func TestDecodeName(t *testing.T) {
+	name, ok := DecodeName("test-user", UserRegExp)
+	assert.Assert(t, ok)
+	assert.Equal(t, name, "test-user")
+	name, ok = DecodeName("%5BDEV%5D%20user", UserRegExp)
+	assert.Assert(t, ok)
+	assert.Equal(t, name, "[DEV] user")
+	for _, entry := range []string{"1user", "%ZZ", "%09tab", "%20user", "user%20", "%C2%A0user"} {
+		_, ok = DecodeName(entry, UserRegExp)
+		assert.Assert(t, !ok, "expected rejected: %q", entry)
+	}
+}
+
+// Names that do not fit UserRegExp or GroupRegExp are percent-encoded in limits and placement filters.
+func TestEncodedNamesInLimitsAndFilters(t *testing.T) {
+	queue := QueueConfig{Name: "parent"}
+	err := checkLimit(Limit{
+		Limit:           "encoded",
+		Users:           []string{"%5BDEV%5D%20user", "test-user"},
+		Groups:          []string{"%5BDEV%5D%20Admins", "test-group"},
+		MaxApplications: 1,
+	}, make(map[string]bool), make(map[string]bool), &queue)
+	assert.NilError(t, err)
+
+	// duplicates are checked on the decoded name
+	err = checkLimit(Limit{Limit: "dup", Users: []string{"%5BDEV%5D%20user", "%5BDEV%5D%20%75ser"}, MaxApplications: 1},
+		make(map[string]bool), make(map[string]bool), &queue)
+	assert.ErrorContains(t, err, "duplicated user name '[DEV] user'")
+
+	err = checkLimit(Limit{Limit: "bad", Users: []string{"%20user"}, MaxApplications: 1},
+		make(map[string]bool), make(map[string]bool), &queue)
+	assert.ErrorContains(t, err, "invalid limit user name '%20user'")
+	err = checkLimit(Limit{Limit: "bad", Groups: []string{"[DEV] Admins"}, MaxApplications: 1},
+		make(map[string]bool), make(map[string]bool), &queue)
+	assert.ErrorContains(t, err, "invalid limit group name '[DEV] Admins'")
+
+	// a single encoded entry is a name, not a regexp
+	assert.NilError(t, checkPlacementFilter(Filter{Users: []string{"%5BDEV%5D%20user"}, Groups: []string{"%5BDEV%5D%20Admins"}}))
+	assert.ErrorContains(t, checkPlacementFilter(Filter{Users: []string{"%ZZ"}}), "invalid rule filter user list")
+	assert.ErrorContains(t, checkPlacementFilter(Filter{Groups: []string{"%20Admins"}}), "invalid rule filter group list")
+}

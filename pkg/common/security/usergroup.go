@@ -166,7 +166,9 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 		}
 	}
 
-	if !configs.UserRegExp.MatchString(ugi.User) {
+	// The name comes from the identity provider, so accept any printable name
+	// (e.g. AD names with spaces or brackets), not just UserRegExp.
+	if !configs.IsPrintableName(ugi.User) {
 		return UserGroup{}, fmt.Errorf("invalid username, it contains invalid characters")
 	}
 

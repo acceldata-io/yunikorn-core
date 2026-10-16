@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -65,8 +66,8 @@ func (a *ACL) setUsers(userList []string, silence bool) {
 			continue
 		}
 		// check the users validity
-		if userNameRegExp.MatchString(user) {
-			a.users[user] = true
+		if name, ok := configs.DecodeName(user, userNameRegExp); ok {
+			a.users[name] = true
 		} else if !silence {
 			log.Log(log.Security).Info("ignoring user in ACL definition",
 				zap.String("user", user))
@@ -100,8 +101,8 @@ func (a *ACL) setGroups(groupList []string, silence bool) {
 			continue
 		}
 		// check the group validity
-		if groupRegExp.MatchString(group) {
-			a.groups[group] = true
+		if name, ok := configs.DecodeName(group, groupRegExp); ok {
+			a.groups[name] = true
 		} else if !silence {
 			log.Log(log.Security).Info("ignoring group in ACL",
 				zap.String("group", group))

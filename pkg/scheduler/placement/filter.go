@@ -147,10 +147,10 @@ func newFilter(conf configs.Filter) Filter {
 			if err != nil {
 				log.Log(log.Config).Debug("Filter user expression does not compile", zap.Any("userFilter", conf.Users))
 			}
-		} else if configs.UserRegExp.MatchString(user) {
+		} else if name, ok := configs.DecodeName(user, configs.UserRegExp); ok {
 			// regexp not found consider this a user, sanity check the entry
 			// single entry just a user
-			filter.userList[user] = true
+			filter.userList[name] = true
 		}
 		filter.empty = false
 	}
@@ -158,8 +158,8 @@ func newFilter(conf configs.Filter) Filter {
 	if len(conf.Users) >= 2 {
 		for _, user := range conf.Users {
 			// sanity check the entry, do not add if it does not comply
-			if configs.UserRegExp.MatchString(user) {
-				filter.userList[user] = true
+			if name, ok := configs.DecodeName(user, configs.UserRegExp); ok {
+				filter.userList[name] = true
 			}
 		}
 		if len(filter.userList) != len(conf.Users) {
@@ -182,10 +182,10 @@ func newFilter(conf configs.Filter) Filter {
 			if err != nil {
 				log.Log(log.Config).Debug("Filter group expression does not compile", zap.Any("groupFilter", conf.Groups))
 			}
-		} else if configs.GroupRegExp.MatchString(group) {
+		} else if name, ok := configs.DecodeName(group, configs.GroupRegExp); ok {
 			// regexp not found consider this a group, sanity check the entry
 			// single entry just a group
-			filter.groupList[group] = true
+			filter.groupList[name] = true
 		}
 		filter.empty = false
 	}
@@ -193,8 +193,8 @@ func newFilter(conf configs.Filter) Filter {
 	if len(conf.Groups) >= 2 {
 		for _, group := range conf.Groups {
 			// sanity check the entry, do not add if it does not comply
-			if configs.GroupRegExp.MatchString(group) {
-				filter.groupList[group] = true
+			if name, ok := configs.DecodeName(group, configs.GroupRegExp); ok {
+				filter.groupList[name] = true
 			}
 		}
 		if len(filter.groupList) != len(conf.Groups) {

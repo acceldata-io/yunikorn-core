@@ -2027,3 +2027,24 @@ func assertWildCardLimits(t *testing.T, limitsConfig map[string]*LimitConfig, ex
 	}
 	assert.Equal(t, resources.Equals(expResource, configuredResource), true)
 }
+
+// Percent-encoded limit names are tracked under the decoded name.
+func TestUpdateConfigEncodedNames(t *testing.T) {
+	setupUGM()
+	manager := GetUserManager()
+	conf := createConfigWithLimits([]configs.Limit{
+		{
+			Limit:           "encoded",
+			Users:           []string{"%5BDEV%5D%20user", "%ZZ"},
+			Groups:          []string{"%5BDEV%5D%20Admins"},
+			MaxApplications: 1,
+		},
+	})
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	assert.Assert(t, manager.userLimits["root.parent"]["[DEV] user"] != nil)
+	// an entry that does not decode keeps its name, it is not tracked under an empty name
+	assert.Assert(t, manager.userLimits["root.parent"]["%ZZ"] != nil)
+	assert.Assert(t, manager.userLimits["root.parent"][""] == nil)
+	assert.Assert(t, manager.groupLimits["root.parent"]["[DEV] Admins"] != nil)
+	assert.DeepEqual(t, manager.configuredGroups["root.parent"], []string{"[DEV] Admins"})
+}

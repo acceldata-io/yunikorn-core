@@ -21,10 +21,13 @@ package configs
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"go.uber.org/zap"
 
@@ -88,6 +91,39 @@ var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:#/_.@-]*[$]?$`)
 
 // GroupRegExp is similar to UserRegExp, groups have a slightly more restrictive regexp (no # / @ or $ at the end)
 var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)
+
+// IsPrintableName checks a user or group name that does not have to fit UserRegExp or GroupRegExp:
+// the name of a submitting user, which comes from the identity provider (e.g. Active Directory names
+// with spaces, '[' or ':'), and a percent-encoded name in an ACL. Any name is accepted as long as it
+// is valid UTF-8, not blank and free of control characters.
+func IsPrintableName(name string) bool {
+	if strings.TrimSpace(name) == "" || !utf8.ValidString(name) {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// DecodeName returns the user or group name a config entry stands for and whether it is valid.
+// A plain entry must match nameRegExp. An entry containing '%' is a percent-encoded name,
+// used for names the plain form cannot carry (e.g. "%5BDEV%5D%20Admins" for the group
+// "[DEV] Admins"). It is decoded and only has to be a printable name without leading or
+// trailing whitespace, which would never match. '%' never matches nameRegExp or
+// SpecialRegExp, so existing names and filter regexps are not affected.
+func DecodeName(entry string, nameRegExp *regexp.Regexp) (string, bool) {
+	if !strings.Contains(entry, "%") {
+		return entry, nameRegExp.MatchString(entry)
+	}
+	name, err := url.PathUnescape(entry)
+	if err != nil || !IsPrintableName(name) || name != strings.TrimSpace(name) {
+		return "", false
+	}
+	return name, true
+}
 
 // SpecialRegExp matches all characters that make a name different from a regexp
 var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
@@ -467,7 +503,7 @@ func checkPlacementFilter(filter Filter) error {
 	if len(filter.Users) == 1 {
 		// for a length of 1 we could either have regexp or username
 		user := filter.Users[0]
-		isUser := UserRegExp.MatchString(user)
+		_, isUser := DecodeName(user, UserRegExp)
 		// if it is not a user name it must be a regexp
 		// two step check: first compile if that fails it is
 		if !isUser {
@@ -479,7 +515,7 @@ func checkPlacementFilter(filter Filter) error {
 	if len(filter.Groups) == 1 {
 		// for a length of 1 we could either have regexp or groupname
 		group := filter.Groups[0]
-		isGroup := GroupRegExp.MatchString(group)
+		_, isGroup := DecodeName(group, GroupRegExp)
 		// if it is not a group name it must be a regexp
 		if !isGroup {
 			if _, err := regexp.Compile(group); err != nil || !SpecialRegExp.MatchString(group) {
@@ -496,9 +532,10 @@ func checkLimit(limit Limit, existingUserName map[string]bool, existingGroupName
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
 
-	for _, name := range limit.Users {
-		if name != "*" && !UserRegExp.MatchString(name) {
-			return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
+	for _, entry := range limit.Users {
+		name, ok := DecodeName(entry, UserRegExp)
+		if entry != "*" && !ok {
+			return fmt.Errorf("invalid limit user name '%s' in limit definition", entry)
 		}
 
 		if existingUserName[name] {
@@ -513,9 +550,10 @@ func checkLimit(limit Limit, existingUserName map[string]bool, existingGroupName
 			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
-	for _, name := range limit.Groups {
-		if name != "*" && !GroupRegExp.MatchString(name) {
-			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
+	for _, entry := range limit.Groups {
+		name, ok := DecodeName(entry, GroupRegExp)
+		if entry != "*" && !ok {
+			return fmt.Errorf("invalid limit group name '%s' in limit definition", entry)
 		}
 
 		if existingGroupName[name] {

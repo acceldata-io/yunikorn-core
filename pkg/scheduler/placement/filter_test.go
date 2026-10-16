@@ -556,3 +556,27 @@ func TestFilter_filterDAO(t *testing.T) {
 		})
 	}
 }
+
+// Names that do not fit the user or group regexp are percent-encoded in a filter.
+func TestNewFilterEncodedNames(t *testing.T) {
+	adUser := security.UserGroup{User: "[DEV] user"}
+	adGroup := security.UserGroup{User: "someone", Groups: []string{"[DEV] Admins"}}
+
+	// a single encoded entry is a name, not a regexp
+	filter := newFilter(configs.Filter{Users: []string{"%5BDEV%5D%20user"}, Groups: []string{"%5BDEV%5D%20Admins"}})
+	if filter.userExp != nil || filter.groupExp != nil || !filter.userList["[DEV] user"] || !filter.groupList["[DEV] Admins"] {
+		t.Errorf("single encoded entries should be decoded into the lists: %v", filter)
+	}
+	if !filter.allowUser(adUser) || !filter.allowUser(adGroup) {
+		t.Error("encoded user and group should be allowed by the filter")
+	}
+
+	// encoded and plain names mixed in a list, invalid entries are ignored
+	filter = newFilter(configs.Filter{Users: []string{"%5BDEV%5D%20user", "test-user", "%20bad"}})
+	if !reflect.DeepEqual(filter.userList, map[string]bool{"[DEV] user": true, "test-user": true}) {
+		t.Errorf("unexpected user list: %v", filter.userList)
+	}
+	if filter.allowUser(security.UserGroup{User: "%5BDEV%5D%20user"}) {
+		t.Error("the encoded form itself should not match")
+	}
+}

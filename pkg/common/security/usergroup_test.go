@@ -524,8 +524,15 @@ func TestConvertUGI(t *testing.T) {
 			if err != nil {
 				t.Errorf("valid username with groups, convert should not have failed: %v", err)
 			}
+			// try username with spaces, brackets and colons (e.g. from AD) with groups
+			ugi.User = "[DEV] Example Team : user"
+			ugi.Groups = []string{group}
+			ug, err = testCache.ConvertUGI(ugi, false)
+			if err != nil || ug.User != ugi.User {
+				t.Errorf("printable username with groups, convert should not have failed: %v %v", ug, err)
+			}
 			// try invalid username with groups
-			ugi.User = "invaliduser><+"
+			ugi.User = "invalid\tuser"
 			ugi.Groups = []string{group}
 			ug, err = testCache.ConvertUGI(ugi, false)
 			if err == nil {

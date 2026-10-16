@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"testing"
 
+	"gotest.tools/v3/assert"
+
 	"github.com/apache/yunikorn-core/pkg/common"
 )
 
@@ -247,4 +249,49 @@ func TestACLAccess(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Names that the plain ACL form cannot carry are percent-encoded in the ACL string.
+func TestACLAccessEncodedNames(t *testing.T) {
+	adminGroup := "[DEV] Example Team : Internal : Access : Administrator"
+	adUser := "[DEV] Example Team : user"
+	// "svc@corp.com" plain, adUser and adminGroup percent-encoded, "devs" plain
+	acl, err := NewACL("svc@corp.com,%5BDEV%5D%20Example%20Team%20%3A%20user "+
+		"devs,%5BDEV%5D%20Example%20Team%20%3A%20Internal%20%3A%20Access%20%3A%20Administrator", false)
+	assert.NilError(t, err)
+
+	tests := []struct {
+		visitor  UserGroup
+		expected bool
+	}{
+		{UserGroup{User: "svc@corp.com"}, true},
+		{UserGroup{User: adUser}, true},
+		{UserGroup{User: "someone", Groups: []string{adminGroup}}, true},
+		{UserGroup{User: "someone", Groups: []string{"devs"}}, true},
+		{UserGroup{User: "someone", Groups: []string{"[DEV] Example Team"}}, false},
+		{UserGroup{User: "someone", Groups: []string{"%5BDEV%5D%20Example%20Team%20%3A%20Internal%20%3A%20Access%20%3A%20Administrator"}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("visitor %v", tt.visitor), func(t *testing.T) {
+			assert.Equal(t, acl.CheckAccess(tt.visitor), tt.expected)
+		})
+	}
+
+	// an encoded wildcard is a literal name, not "allow all"
+	acl, err = NewACL("%2A", false)
+	assert.NilError(t, err)
+	assert.Assert(t, !acl.allAllowed)
+	assert.Assert(t, acl.users["*"])
+
+	// malformed escapes and non-printable names are ignored
+	acl, err = NewACL("%ZZ,%09tab,good %0Anewline,ok", false)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, acl.users, map[string]bool{"good": true})
+	assert.DeepEqual(t, acl.groups, map[string]bool{"ok": true})
+
+	// decoded names with leading or trailing whitespace are ignored
+	acl, err = NewACL("a,%20%5BDEV%5D, %5BDEV%5D b,%5BDEV%5D%20", false)
+	assert.NilError(t, err)
+	assert.DeepEqual(t, acl.users, map[string]bool{"a": true})
+	assert.DeepEqual(t, acl.groups, map[string]bool{"b": true})
 }
